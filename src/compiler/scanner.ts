@@ -2246,7 +2246,7 @@ export function createScanner(
                     pos++;
                     return token = SyntaxKind.GreaterThanToken;
                 case CharacterCodes.question:
-                    if (charCodeUnchecked(pos + 1) === CharacterCodes.dot && !isDigit(charCodeUnchecked(pos + 2))) {
+                    if (charCodeUnchecked(pos + 1) === CharacterCodes.dot) {
                         return pos += 2, token = SyntaxKind.QuestionDotToken;
                     }
                     if (charCodeUnchecked(pos + 1) === CharacterCodes.question) {

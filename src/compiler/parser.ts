@@ -6455,19 +6455,6 @@ namespace Parser {
 
     function parseTupleIndexerIntegralNumericLiteralElementAccess(pos: number, expression: LeftHandSideExpression, questionDotToken: QuestionDotToken | undefined)
     {
-        let argumentExpression: Expression;
-        const text = scanner.getTokenText();
-        const nodePos = getNodePos();
-        const argument = factory.synthesizeNumericLiteral(text.split('.')[1], nodePos + 1, nodePos + text.length);
-        argument.text = internIdentifier(argument.text);
-        argumentExpression = argument;
-
-        nextToken();
-
-        const indexedAccess = questionDotToken || tryReparseOptionalChain(expression) ?
-            factoryCreateElementAccessChain(expression, questionDotToken, argumentExpression) :
-            factoryCreateElementAccessExpression(expression, argumentExpression);
-        return finishNode(indexedAccess, pos);
     }
 
     function parseMemberExpressionRest(pos: number, expression: LeftHandSideExpression, allowOptionalChain: boolean): MemberExpression {
@@ -6476,8 +6463,66 @@ namespace Parser {
             let questionDotToken: QuestionDotToken | undefined;
             if (token() === SyntaxKind.NumericLiteral && scanner.getTokenText().startsWith('.'))
             {
-                expression = parseTupleIndexerIntegralNumericLiteralElementAccess(pos, expression, questionDotToken);
+                let argumentExpression: Expression;
+                const text = scanner.getTokenText();
+                const nodePos = getNodePos();
+                const argument = factory.synthesizeNumericLiteral(text.split('.')[1], nodePos + 1, nodePos + text.length);
+                argument.text = internIdentifier(argument.text);
+                argumentExpression = argument;
+
+                nextToken();
+
+                const indexedAccess = questionDotToken || tryReparseOptionalChain(expression) ?
+                    factoryCreateElementAccessChain(expression, questionDotToken, argumentExpression) :
+                    factoryCreateElementAccessExpression(expression, argumentExpression);
+                expression = finishNode(indexedAccess, pos);
                 continue;
+            }
+            else if (lookAhead(() => parseOptional(SyntaxKind.QuestionDotToken) && token() === SyntaxKind.NumericLiteral && !scanner.getTokenText().startsWith('.')))
+            {
+                questionDotToken = parseExpectedToken(SyntaxKind.QuestionDotToken);
+
+                const text = scanner.getTokenText().split('.');
+                if (text.length == 1)
+                {
+                    let argumentExpression: Expression;
+                    const nodePos = getNodePos();
+                    nextToken();
+                    const argument = factory.synthesizeNumericLiteral(text[0], nodePos, nodePos + text[0].length);
+                    argument.text = internIdentifier(argument.text);
+                    argumentExpression = argument;
+
+                    const indexedAccess = questionDotToken || tryReparseOptionalChain(expression) ?
+                        factoryCreateElementAccessChain(expression, questionDotToken, argumentExpression) :
+                        factoryCreateElementAccessExpression(expression, argumentExpression);
+                    expression = finishNode(indexedAccess, pos);
+                    continue;
+                }
+                else
+                {
+                    let argumentExpression: Expression;
+                    let nodePos = getNodePos();
+                    let argument = factory.synthesizeNumericLiteral(text[0], nodePos, nodePos += text[0].length);
+                    argument.text = internIdentifier(argument.text);
+                    argumentExpression = argument;
+
+                    let indexedAccess = questionDotToken || tryReparseOptionalChain(expression) ?
+                        factoryCreateElementAccessChain(expression, questionDotToken, argumentExpression) :
+                        factoryCreateElementAccessExpression(expression, argumentExpression);
+                    expression = finishNode(indexedAccess, pos, nodePos);
+
+                    argument = factory.synthesizeNumericLiteral(text[1], ++nodePos, nodePos + text[1].length);
+                    argument.text = internIdentifier(argument.text);
+                    argumentExpression = argument;
+
+                    nextToken();
+
+                    indexedAccess = tryReparseOptionalChain(expression) ?
+                        factoryCreateElementAccessChain(expression, undefined, argumentExpression) :
+                        factoryCreateElementAccessExpression(expression, argumentExpression);
+                    expression = finishNode(indexedAccess, pos);
+                    continue;
+                }
             }
 
             let isPropertyAccess = false;
