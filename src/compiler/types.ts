@@ -8723,6 +8723,7 @@ export interface NodeFactory {
     // Literals
     //
 
+    synthesizeNumericLiteral(value: string | number, pos: number, end: number, numericLiteralFlags?: TokenFlags): NumericLiteral;
     createNumericLiteral(value: string | number, numericLiteralFlags?: TokenFlags): NumericLiteral;
     createBigIntLiteral(value: string | PseudoBigInt): BigIntLiteral;
     createStringLiteral(text: string, isSingleQuote?: boolean): StringLiteral;
@@ -9011,6 +9012,7 @@ export interface NodeFactory {
     // Element
     //
 
+    convertStatementToBlock(statement: Statement | undefined): Block | undefined;
     createBlock(statements: readonly Statement[], multiLine?: boolean): Block;
     updateBlock(node: Block, statements: readonly Statement[]): Block;
     createVariableStatement(modifiers: readonly ModifierLike[] | undefined, declarationList: VariableDeclarationList | readonly VariableDeclaration[]): VariableStatement;

@@ -16,6 +16,7 @@ export interface BaseNodeFactory {
     createBasePrivateIdentifierNode(kind: SyntaxKind.PrivateIdentifier): Node;
     createBaseTokenNode(kind: SyntaxKind): Node;
     createBaseNode(kind: SyntaxKind): Node;
+    createNode(kind: SyntaxKind, pos: number, end: number): Node;
 }
 
 /**
@@ -36,6 +37,7 @@ export function createBaseNodeFactory(): BaseNodeFactory {
         createBasePrivateIdentifierNode,
         createBaseTokenNode,
         createBaseNode,
+        createNode,
     };
 
     function createBaseSourceFileNode(kind: SyntaxKind.SourceFile): Node {
@@ -56,5 +58,9 @@ export function createBaseNodeFactory(): BaseNodeFactory {
 
     function createBaseNode(kind: SyntaxKind): Node {
         return new (NodeConstructor || (NodeConstructor = objectAllocator.getNodeConstructor()))(kind, /*pos*/ -1, /*end*/ -1);
+    }
+
+    function createNode(kind: SyntaxKind, pos: number, end: number): Node {
+        return new (NodeConstructor || (NodeConstructor = objectAllocator.getNodeConstructor()))(kind, pos, end);
     }
 }

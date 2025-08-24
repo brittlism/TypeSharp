@@ -160,6 +160,7 @@ import {
     isMetaProperty,
     isModifierKind,
     isNonNullExpression,
+    isNumericLiteral,
     isPrivateIdentifier,
     isSetAccessorDeclaration,
     isStringOrNumericLiteralLike,
@@ -435,6 +436,7 @@ export const parseBaseNodeFactory: BaseNodeFactory = {
     createBasePrivateIdentifierNode: kind => new (PrivateIdentifierConstructor || (PrivateIdentifierConstructor = objectAllocator.getPrivateIdentifierConstructor()))(kind, -1, -1),
     createBaseTokenNode: kind => new (TokenConstructor || (TokenConstructor = objectAllocator.getTokenConstructor()))(kind, -1, -1),
     createBaseNode: kind => new (NodeConstructor || (NodeConstructor = objectAllocator.getNodeConstructor()))(kind, -1, -1),
+    createNode: (kind, pos, end) => new (NodeConstructor || (NodeConstructor = objectAllocator.getNodeConstructor()))(kind, pos, end),
 };
 
 /** @internal */
@@ -1465,6 +1467,7 @@ namespace Parser {
         createBasePrivateIdentifierNode: kind => countNode(new PrivateIdentifierConstructor(kind, /*pos*/ 0, /*end*/ 0)),
         createBaseTokenNode: kind => countNode(new TokenConstructor(kind, /*pos*/ 0, /*end*/ 0)),
         createBaseNode: kind => countNode(new NodeConstructor(kind, /*pos*/ 0, /*end*/ 0)),
+        createNode: (kind, pos, end) => countNode(new NodeConstructor(kind, pos, end)),
     };
 
     var factory = createNodeFactory(NodeFactoryFlags.NoParenthesizerRules | NodeFactoryFlags.NoNodeConverters | NodeFactoryFlags.NoOriginalNode, baseNodeFactory);
@@ -6450,17 +6453,40 @@ namespace Parser {
         return finishNode(indexedAccess, pos);
     }
 
+    function parseTupleIndexerIntegralNumericLiteralElementAccess(pos: number, expression: LeftHandSideExpression, questionDotToken: QuestionDotToken | undefined)
+    {
+        let argumentExpression: Expression;
+        const text = scanner.getTokenText();
+        const nodePos = getNodePos();
+        const argument = factory.synthesizeNumericLiteral(text.split('.')[1], nodePos + 1, nodePos + text.length);
+        argument.text = internIdentifier(argument.text);
+        argumentExpression = argument;
+
+        nextToken();
+
+        const indexedAccess = questionDotToken || tryReparseOptionalChain(expression) ?
+            factoryCreateElementAccessChain(expression, questionDotToken, argumentExpression) :
+            factoryCreateElementAccessExpression(expression, argumentExpression);
+        return finishNode(indexedAccess, pos);
+    }
+
     function parseMemberExpressionRest(pos: number, expression: LeftHandSideExpression, allowOptionalChain: boolean): MemberExpression {
-        while (true) {
+        while (true)
+        {
             let questionDotToken: QuestionDotToken | undefined;
+            if (token() === SyntaxKind.NumericLiteral && scanner.getTokenText().startsWith('.'))
+            {
+                expression = parseTupleIndexerIntegralNumericLiteralElementAccess(pos, expression, questionDotToken);
+                continue;
+            }
+
             let isPropertyAccess = false;
             if (allowOptionalChain && isStartOfOptionalPropertyOrElementAccessChain()) {
                 questionDotToken = parseExpectedToken(SyntaxKind.QuestionDotToken);
                 isPropertyAccess = tokenIsIdentifierOrKeyword(token());
             }
-            else {
-                isPropertyAccess = parseOptional(SyntaxKind.DotToken);
-            }
+            else if (parseOptional(SyntaxKind.DotToken))
+                isPropertyAccess = true;
 
             if (isPropertyAccess) {
                 expression = parsePropertyAccessExpressionRest(pos, expression, questionDotToken);
@@ -6468,9 +6494,13 @@ namespace Parser {
             }
 
             // when in the [Decorator] context, we do not parse ElementAccess as it could be part of a ComputedPropertyName
-            if ((questionDotToken || !inDecoratorContext()) && parseOptional(SyntaxKind.OpenBracketToken)) {
-                expression = parseElementAccessExpressionRest(pos, expression, questionDotToken);
-                continue;
+            if ((questionDotToken || !inDecoratorContext()))
+            {
+                if (parseOptional(SyntaxKind.OpenBracketToken))
+                {
+                    expression = parseElementAccessExpressionRest(pos, expression, questionDotToken);
+                    continue;
+                }
             }
 
             if (isTemplateStartOfTaggedTemplate()) {
@@ -7080,7 +7110,7 @@ namespace Parser {
         const hasJSDoc = hasPrecedingJSDocComment();
 
         parseExpected(SyntaxKind.TryKeyword);
-        const tryBlock = parseBlock(/*ignoreMissingOpenBrace*/ false);
+        const tryBlock = parseEmbeddedStatementAsBlock();
         const catchClause = token() === SyntaxKind.CatchKeyword ? parseCatchClause() : undefined;
 
         // If we don't have a catch clause, then we must have a finally clause.  Try to parse
@@ -7088,7 +7118,7 @@ namespace Parser {
         let finallyBlock: Block | undefined;
         if (!catchClause || token() === SyntaxKind.FinallyKeyword) {
             parseExpected(SyntaxKind.FinallyKeyword, Diagnostics.catch_or_finally_expected);
-            finallyBlock = parseBlock(/*ignoreMissingOpenBrace*/ false);
+            finallyBlock = parseEmbeddedStatementAsBlock();
         }
 
         return withJSDoc(finishNode(factory.createTryStatement(tryBlock, catchClause, finallyBlock), pos), hasJSDoc);
@@ -7108,7 +7138,7 @@ namespace Parser {
             variableDeclaration = undefined;
         }
 
-        const block = parseBlock(/*ignoreMissingOpenBrace*/ false);
+        const block = parseEmbeddedStatementAsBlock();
         return finishNode(factory.createCatchClause(variableDeclaration, block), pos);
     }
 
@@ -7375,6 +7405,12 @@ namespace Parser {
         // |ObjectBindingPattern| so that we can report a grammar error during check. We don't parse out
         // |ArrayBindingPattern| since it potentially conflicts with element access (i.e., `await using[x]`).
         return lookAhead(nextTokenIsUsingKeywordThenBindingIdentifierOrStartOfObjectDestructuringOnSameLine);
+    }
+
+    function parseEmbeddedStatementAsBlock(): Block
+    {
+        const statement = parseStatement();
+        return statement.kind == SyntaxKind.Block ? statement as Block : factory.createBlock([statement], false);
     }
 
     function parseStatement(): Statement {

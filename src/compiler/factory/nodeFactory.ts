@@ -521,6 +521,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         flags,
         createNodeArray,
         createNumericLiteral,
+        synthesizeNumericLiteral,
         createBigIntLiteral,
         createStringLiteral,
         createStringLiteralFromNode,
@@ -705,6 +706,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         createTemplateSpan,
         updateTemplateSpan,
         createSemicolonClassElement,
+        convertStatementToBlock,
         createBlock,
         updateBlock,
         createVariableStatement,
@@ -1210,8 +1212,19 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         return baseFactory.createBaseNode(kind) as Mutable<T>;
     }
 
+    function createNode<T extends Node>(kind: T["kind"], pos: number, end: number) {
+        return baseFactory.createNode(kind, pos, end) as Mutable<T>;
+    }
+
     function createBaseDeclaration<T extends Declaration>(kind: T["kind"]) {
         const node = createBaseNode(kind);
+        node.symbol = undefined!; // initialized by binder
+        node.localSymbol = undefined; // initialized by binder
+        return node;
+    }
+
+    function createDeclaration<T extends Declaration>(kind: T["kind"], pos: number, end: number) {
+        const node = createNode(kind, pos, end);
         node.symbol = undefined!; // initialized by binder
         node.localSymbol = undefined; // initialized by binder
         return node;
@@ -1228,6 +1241,17 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
     //
     // Literals
     //
+
+    // @api
+    function synthesizeNumericLiteral(value: string | number, pos: number, end: number, numericLiteralFlags: TokenFlags = TokenFlags.None): NumericLiteral {
+        const text = typeof value === "number" ? value + "" : value;
+        Debug.assert(text.charCodeAt(0) !== CharacterCodes.minus, "Negative numbers should be created in combination with createPrefixUnaryExpression");
+        const node = createDeclaration<NumericLiteral>(SyntaxKind.NumericLiteral, pos, end);
+        node.text = text;
+        node.numericLiteralFlags = numericLiteralFlags;
+        if (numericLiteralFlags & TokenFlags.BinaryOrOctalSpecifier) node.transformFlags |= TransformFlags.ContainsES2015;
+        return node;
+    }
 
     // @api
     function createNumericLiteral(value: string | number, numericLiteralFlags: TokenFlags = TokenFlags.None): NumericLiteral {
@@ -3851,6 +3875,11 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
     //
     // Element
     //
+
+    function convertStatementToBlock(statement: Statement | undefined): Block | undefined
+    {
+        return statement === undefined ? undefined : (statement.kind == SyntaxKind.Block ? statement as Block : factory.createBlock([statement], false));
+    }
 
     // @api
     function createBlock(statements: readonly Statement[], multiLine?: boolean): Block {
@@ -7404,6 +7433,7 @@ const syntheticFactory: BaseNodeFactory = {
     createBasePrivateIdentifierNode: kind => makeSynthetic(baseFactory.createBasePrivateIdentifierNode(kind)),
     createBaseTokenNode: kind => makeSynthetic(baseFactory.createBaseTokenNode(kind)),
     createBaseNode: kind => makeSynthetic(baseFactory.createBaseNode(kind)),
+    createNode: (kind, pos, end) => makeSynthetic(baseFactory.createNode(kind, pos, end)),
 };
 
 export const factory: NodeFactory = createNodeFactory(NodeFactoryFlags.NoIndentationOnFreshPropertyAccess, syntheticFactory);
