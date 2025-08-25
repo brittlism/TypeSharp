@@ -160,7 +160,6 @@ import {
     isMetaProperty,
     isModifierKind,
     isNonNullExpression,
-    isNumericLiteral,
     isPrivateIdentifier,
     isSetAccessorDeclaration,
     isStringOrNumericLiteralLike,
@@ -6459,18 +6458,16 @@ namespace Parser {
             let questionDotToken: QuestionDotToken | undefined;
             if (token() === SyntaxKind.NumericLiteral && scanner.getTokenText().startsWith('.'))
             {
-                let argumentExpression: Expression;
                 const text = scanner.getTokenText();
                 const nodePos = getNodePos();
                 const argument = factory.synthesizeNumericLiteral(text.split('.')[1], nodePos + 1, nodePos + text.length);
                 argument.text = internIdentifier(argument.text);
-                argumentExpression = argument;
 
                 nextToken();
 
                 const indexedAccess = questionDotToken || tryReparseOptionalChain(expression) ?
-                    factoryCreateElementAccessChain(expression, questionDotToken, argumentExpression) :
-                    factoryCreateElementAccessExpression(expression, argumentExpression);
+                    factoryCreateElementAccessChain(expression, questionDotToken, argument) :
+                    factoryCreateElementAccessExpression(expression, argument);
                 expression = finishNode(indexedAccess, pos);
                 continue;
             }
@@ -6479,18 +6476,16 @@ namespace Parser {
                 questionDotToken = parseExpectedToken(SyntaxKind.QuestionDotToken);
 
                 const text = scanner.getTokenText().split('.');
-                if (text.length == 1)
+                if (text.length === 1)
                 {
-                    let argumentExpression: Expression;
                     const nodePos = getNodePos();
                     nextToken();
                     const argument = factory.synthesizeNumericLiteral(text[0], nodePos, nodePos + text[0].length);
                     argument.text = internIdentifier(argument.text);
-                    argumentExpression = argument;
 
                     const indexedAccess = questionDotToken || tryReparseOptionalChain(expression) ?
-                        factoryCreateElementAccessChain(expression, questionDotToken, argumentExpression) :
-                        factoryCreateElementAccessExpression(expression, argumentExpression);
+                        factoryCreateElementAccessChain(expression, questionDotToken, argument) :
+                        factoryCreateElementAccessExpression(expression, argument);
                     expression = finishNode(indexedAccess, pos);
                     continue;
                 }
@@ -6514,7 +6509,7 @@ namespace Parser {
                     nextToken();
 
                     indexedAccess = tryReparseOptionalChain(expression) ?
-                        factoryCreateElementAccessChain(expression, undefined, argumentExpression) :
+                        factoryCreateElementAccessChain(expression, /*questionDotToken*/ undefined, argumentExpression) :
                         factoryCreateElementAccessExpression(expression, argumentExpression);
                     expression = finishNode(indexedAccess, pos);
                     continue;
@@ -7451,7 +7446,7 @@ namespace Parser {
     function parseEmbeddedStatementAsBlock(): Block
     {
         const statement = parseStatement();
-        return statement.kind == SyntaxKind.Block ? statement as Block : factory.createBlock([statement], false);
+        return statement.kind === SyntaxKind.Block ? statement as Block : factory.createBlock([statement], /*multiLine*/ false);
     }
 
     function parseStatement(): Statement {
